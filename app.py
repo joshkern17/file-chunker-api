@@ -23,8 +23,9 @@ def extract():
             with pdfplumber.open(f.stream) as pdf:
                 raw = "\n\n".join(page.extract_text() or "" for page in pdf.pages)
         elif mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            result = mammoth.extract_raw_text(f.stream.read())
-            raw = result.value
+            f.stream.seek(0)
+            result = mammoth.extract_raw_text(f.stream)
+            raw    = result.value
         elif mime.startswith("text/"):
             raw = f.stream.read().decode("utf-8")
         else:
