@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 import pdfplumber
-import mammoth
+from docx import Document
+import traceback
+import os
 
 app = Flask(__name__)
 
@@ -15,30 +17,40 @@ def chunk_text(raw_text, paras_per_chunk=3):
 def extract():
     if "file" not in request.files:
         return jsonify(error="No file part"), 400
+
     f = request.files["file"]
     mime = f.mimetype
 
     try:
+        # PDF extraction
         if mime == "application/pdf":
             with pdfplumber.open(f.stream) as pdf:
                 raw = "\n\n".join(page.extract_text() or "" for page in pdf.pages)
+
+        # DOCX extraction via python-docx
         elif mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            f.stream.seek(0)
-            result = mammoth.extract_raw_text(f.stream)
-            raw    = result.value
+            # python-docx handles file-like objects directly
+            doc = Document(f.stream)
+            raw = "\n\n".join(p.text for p in doc.paragraphs)
+
+        # Plain text
         elif mime.startswith("text/"):
             raw = f.stream.read().decode("utf-8")
+
         else:
             return jsonify(error=f"Unsupported MIME type {mime}"), 415
 
+        # Chunk and return
         chunks = chunk_text(raw)
         return jsonify(chunk_count=len(chunks), chunks=chunks)
+
     except Exception as e:
-        print("Error parsing:", e)
-        return jsonify(error="Parse error"), 500
+        # Print full stack to Render logs
+        tb = traceback.format_exc()
+        print(tb)
+        # Return JSON with error message
+        return jsonify(error="Parse error", message=str(e)), 500
 
 if __name__ == "__main__":
-    # Render gives you the PORT env var automatically
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
